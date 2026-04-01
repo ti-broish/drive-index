@@ -1,0 +1,38 @@
+{
+  "name": "drive-index",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-03-31",
+
+  // Queue bindings
+  "queues": {
+    "producers": [
+      {
+        "binding": "DRIVE_EVENTS",
+        "queue": "drive-index-events"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "drive-index-events",
+        "max_batch_size": 50,
+        "max_batch_timeout": 30,
+        "max_retries": 3
+      }
+    ]
+  },
+
+  // Cron trigger to renew Drive watch channel
+  "triggers": {
+    "crons": ["0 0 */5 * *"]
+  },
+
+  // Environment variables (non-secret)
+  "vars": {
+    "FOLDER_ID": "",
+    "SPREADSHEET_ID": ""
+  }
+
+  // Secrets (set via `wrangler secret put`):
+  // - GOOGLE_SERVICE_ACCOUNT_KEY (JSON string)
+  // - WEBHOOK_SECRET (random string for verifying webhook origin)
+}
