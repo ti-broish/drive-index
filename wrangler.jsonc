@@ -29,7 +29,7 @@
   // Environment variables (non-secret)
   "vars": {
     // Set to "true" to enable automatic watch channel renewal via cron
-    "WATCH_ENABLED": "false"
+    "WATCH_ENABLED": "true"
   },
 
   // Required secrets — wrangler deploy will fail if these are not set

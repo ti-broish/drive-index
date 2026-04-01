@@ -66,31 +66,33 @@ Google Drive push notification
    wrangler queues create drive-index-events
    ```
 
-3. **Set environment variables** in `wrangler.jsonc`:
-   ```jsonc
-   "vars": {
-     "FOLDER_ID": "<your Google Drive folder ID>",
-     "SPREADSHEET_ID": "<your Google Sheet ID>",
-     "WORKER_URL": "https://drive-index.<your-subdomain>.workers.dev",
-     "WATCH_ENABLED": "true"
-   }
-   ```
-
-   The folder ID is in the Drive URL: `https://drive.google.com/drive/folders/<FOLDER_ID>`
-
-4. **Set secrets** (deploy will fail if these are missing):
+3. **Set secrets** (deploy will fail if any are missing):
    ```bash
    # Paste the entire JSON key file contents when prompted
    wrangler secret put GOOGLE_SERVICE_ACCOUNT_KEY
 
-   # Generate a random secret for webhook verification
+   # Generate a random secret for webhook verification (use: openssl rand -hex 32)
    wrangler secret put WEBHOOK_SECRET
+
+   # Google Drive folder ID (from URL: drive.google.com/drive/folders/<FOLDER_ID>)
+   wrangler secret put FOLDER_ID
+
+   # Google Sheet ID (from URL: docs.google.com/spreadsheets/d/<SPREADSHEET_ID>/edit)
+   wrangler secret put SPREADSHEET_ID
+
+   # Sheet tab name where file index will be written
+   wrangler secret put SHEET_NAME
+
+   # Public URL of the deployed worker
+   wrangler secret put WORKER_URL
    ```
 
-   To generate a good secret:
+   Alternatively, set them all at once:
    ```bash
-   openssl rand -hex 32
+   echo '{"FOLDER_ID":"...","SPREADSHEET_ID":"...","SHEET_NAME":"...","WORKER_URL":"..."}' | wrangler secret bulk
    ```
+
+4. **Enable watching** (optional) — set `WATCH_ENABLED` to `"true"` in `wrangler.jsonc` if you want the cron to auto-renew the Drive watch channel.
 
 5. **Deploy**:
    ```bash
@@ -130,6 +132,10 @@ pnpm install
 cat > .dev.vars << 'EOF'
 GOOGLE_SERVICE_ACCOUNT_KEY={"type":"service_account",...}
 WEBHOOK_SECRET=your-secret-here
+FOLDER_ID=your-folder-id
+SPREADSHEET_ID=your-spreadsheet-id
+SHEET_NAME=files
+WORKER_URL=http://localhost:8787
 EOF
 
 pnpm dev
@@ -145,7 +151,7 @@ pnpm test
 
 1. **Webhook** — Google Drive sends a POST to `/webhook` when files change in the watched folder. The worker verifies the request using the channel token and enqueues an event.
 
-2. **Queue consumer** — CF Queue batches events (max 50 or 30s timeout). The consumer recursively lists all files in the folder and its subfolders via the Drive API, then writes the full listing to the Google Sheet.
+2. **Queue consumer** — CF Queue batches events (max 50 or 30s timeout). The consumer recursively lists all files in the folder and its subfolders via the Drive API, then replaces the sheet contents (from row 2 down) with file names in column A and IDs in column B.
 
 3. **Cron** — Every 5 days, the scheduled handler renews the Drive watch channel (channels expire after ~7 days max). Only runs when `WATCH_ENABLED` is `"true"`.
 
