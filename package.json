@@ -13,10 +13,10 @@
     "setup:local": "bash scripts/setup-local.sh"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.8.0",
-    "@cloudflare/workers-types": "^4.20250327.0",
-    "typescript": "^5.8.2",
-    "vitest": "^3.1.1",
-    "wrangler": "^4.10.0"
+    "@cloudflare/vitest-pool-workers": "^0.14.0",
+    "@cloudflare/workers-types": "^4.20260401.1",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2",
+    "wrangler": "^4.79.0"
   }
 }

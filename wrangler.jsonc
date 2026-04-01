@@ -1,7 +1,7 @@
 {
   "name": "drive-index",
   "main": "src/index.ts",
-  "compatibility_date": "2025-03-31",
+  "compatibility_date": "2026-04-01",
 
   // Queue bindings
   "queues": {
