@@ -11,6 +11,7 @@ export default defineWorkersConfig({
             WEBHOOK_SECRET: "test-secret",
             FOLDER_ID: "test-folder-id",
             SPREADSHEET_ID: "test-sheet-id",
+            SHEET_NAME: "files",
             WORKER_URL: "https://drive-index.example.com",
             WATCH_ENABLED: "false",
           },

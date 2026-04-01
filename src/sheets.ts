@@ -6,27 +6,25 @@ const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
 export async function writeToSheet(
   serviceAccountKey: string,
   spreadsheetId: string,
+  sheetName: string,
   files: FileEntry[],
 ): Promise<void> {
   const token = await getAccessToken(serviceAccountKey);
 
-  // Clear existing data
+  // Clear existing data rows (preserve header in row 1)
   await fetch(
-    `${SHEETS_API}/${spreadsheetId}/values/Sheet1!A:B:clear`,
+    `${SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A2:B:clear`,
     {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     },
   );
 
-  // Write header + data
-  const values = [
-    ["File", "ID"],
-    ...files.map((f) => [f.name, f.id]),
-  ];
+  // Write file names in column A, IDs in column B, starting at row 2
+  const values = files.map((f) => [f.name, f.id]);
 
   const res = await fetch(
-    `${SHEETS_API}/${spreadsheetId}/values/Sheet1!A1?valueInputOption=RAW`,
+    `${SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A2?valueInputOption=RAW`,
     {
       method: "PUT",
       headers: {

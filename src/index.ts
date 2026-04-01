@@ -7,6 +7,7 @@ export interface Env {
   WEBHOOK_SECRET: string;
   FOLDER_ID: string;
   SPREADSHEET_ID: string;
+  SHEET_NAME: string;
   WORKER_URL: string;
   WATCH_ENABLED: string;
 }
@@ -59,6 +60,7 @@ export default {
     await writeToSheet(
       env.GOOGLE_SERVICE_ACCOUNT_KEY,
       env.SPREADSHEET_ID,
+      env.SHEET_NAME,
       files,
     );
 
@@ -154,6 +156,7 @@ async function handleReindex(request: Request, env: Env): Promise<Response> {
   await writeToSheet(
     env.GOOGLE_SERVICE_ACCOUNT_KEY,
     env.SPREADSHEET_ID,
+    env.SHEET_NAME,
     files,
   );
 
