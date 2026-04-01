@@ -9,7 +9,8 @@
     "types": "wrangler types",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "setup:local": "bash scripts/setup-local.sh"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.8.0",

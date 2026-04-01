@@ -128,15 +128,8 @@ curl -X POST https://drive-index.<your-subdomain>.workers.dev/reindex \
 ```bash
 pnpm install
 
-# Create .dev.vars with your secrets for local dev
-cat > .dev.vars << 'EOF'
-GOOGLE_SERVICE_ACCOUNT_KEY={"type":"service_account",...}
-WEBHOOK_SECRET=your-secret-here
-FOLDER_ID=your-folder-id
-SPREADSHEET_ID=your-spreadsheet-id
-SHEET_NAME=files
-WORKER_URL=http://localhost:8787
-EOF
+# Interactive prompt — reads secrets.required from wrangler.jsonc
+pnpm setup:local
 
 pnpm dev
 ```
