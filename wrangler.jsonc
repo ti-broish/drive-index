@@ -29,10 +29,14 @@
   // Environment variables (non-secret)
   "vars": {
     "FOLDER_ID": "",
-    "SPREADSHEET_ID": ""
-  }
+    "SPREADSHEET_ID": "",
+    "WORKER_URL": "",
+    // Set to "true" to enable automatic watch channel renewal via cron
+    "WATCH_ENABLED": "false"
+  },
 
-  // Secrets (set via `wrangler secret put`):
-  // - GOOGLE_SERVICE_ACCOUNT_KEY (JSON string)
-  // - WEBHOOK_SECRET (random string for verifying webhook origin)
+  // Required secrets — wrangler deploy will fail if these are not set
+  "secrets": {
+    "required": ["GOOGLE_SERVICE_ACCOUNT_KEY", "WEBHOOK_SECRET"]
+  }
 }

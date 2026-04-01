@@ -11,12 +11,13 @@ Google Drive push notification
 ┌───────────────────────┐
 │  Worker  POST /webhook│──► CF Queue (batched)
 │          POST /setup  │         │
-│          POST /reindex│         ▼
-│          GET  /       │    Queue consumer:
-└───────────────────────┘    reindex folder → write Sheet
+│          POST /stop   │         ▼
+│          POST /reindex│    Queue consumer:
+│          GET  /       │    reindex folder → write Sheet
+└───────────────────────┘
         ▲
         │
-  Cron (every 5 days) — renews watch channel
+  Cron (every 5 days) — renews watch channel (if WATCH_ENABLED)
 ```
 
 ## Setup
@@ -56,7 +57,7 @@ Google Drive push notification
 
 1. **Install Wrangler** (if not already):
    ```bash
-   npm install -g wrangler
+   pnpm install -g wrangler
    wrangler login
    ```
 
@@ -69,13 +70,15 @@ Google Drive push notification
    ```jsonc
    "vars": {
      "FOLDER_ID": "<your Google Drive folder ID>",
-     "SPREADSHEET_ID": "<your Google Sheet ID>"
+     "SPREADSHEET_ID": "<your Google Sheet ID>",
+     "WORKER_URL": "https://drive-index.<your-subdomain>.workers.dev",
+     "WATCH_ENABLED": "true"
    }
    ```
 
    The folder ID is in the Drive URL: `https://drive.google.com/drive/folders/<FOLDER_ID>`
 
-4. **Set secrets**:
+4. **Set secrets** (deploy will fail if these are missing):
    ```bash
    # Paste the entire JSON key file contents when prompted
    wrangler secret put GOOGLE_SERVICE_ACCOUNT_KEY
@@ -91,10 +94,8 @@ Google Drive push notification
 
 5. **Deploy**:
    ```bash
-   npm run deploy
+   pnpm deploy
    ```
-
-6. **Update the worker URL** in `src/index.ts` for the cron handler — replace `<your-subdomain>` with your actual Workers subdomain (or use a custom domain).
 
 ### 3. Register the Drive watch channel
 
@@ -105,26 +106,39 @@ curl -X POST https://drive-index.<your-subdomain>.workers.dev/setup \
   -H "Authorization: Bearer <your-webhook-secret>"
 ```
 
-This creates a watch channel that expires in ~7 days. The cron trigger (every 5 days) automatically renews it.
+This creates a watch channel that expires in ~7 days. The cron trigger (every 5 days) automatically renews it while `WATCH_ENABLED` is `"true"`.
 
-### 4. Manual reindex
+### 4. Stopping the watch
+
+Set `WATCH_ENABLED` to `"false"` in `wrangler.jsonc` and redeploy (or update via the CF dashboard). The cron will stop renewing the channel and it will expire within 7 days.
+
+### 5. Manual reindex
 
 To trigger a full reindex on demand:
 
 ```bash
-curl -X POST https://drive-index.<your-subdomain>.workers.dev/reindex
+curl -X POST https://drive-index.<your-subdomain>.workers.dev/reindex \
+  -H "Authorization: Bearer <your-webhook-secret>"
 ```
 
 ## Local development
 
 ```bash
+pnpm install
+
 # Create .dev.vars with your secrets for local dev
 cat > .dev.vars << 'EOF'
 GOOGLE_SERVICE_ACCOUNT_KEY={"type":"service_account",...}
 WEBHOOK_SECRET=your-secret-here
 EOF
 
-npm run dev
+pnpm dev
+```
+
+## Tests
+
+```bash
+pnpm test
 ```
 
 ## How it works
@@ -133,18 +147,19 @@ npm run dev
 
 2. **Queue consumer** — CF Queue batches events (max 50 or 30s timeout). The consumer recursively lists all files in the folder and its subfolders via the Drive API, then writes the full listing to the Google Sheet.
 
-3. **Cron** — Every 5 days, the scheduled handler renews the Drive watch channel (channels expire after ~7 days max).
+3. **Cron** — Every 5 days, the scheduled handler renews the Drive watch channel (channels expire after ~7 days max). Only runs when `WATCH_ENABLED` is `"true"`.
 
 4. **Reindex** — `POST /reindex` triggers a manual full reindex without going through the queue.
 
 ## API endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/` | Health check |
-| `POST` | `/webhook` | Google Drive push notification receiver |
-| `POST` | `/setup` | Register Drive watch channel (requires `Authorization: Bearer <secret>`) |
-| `POST` | `/reindex` | Trigger full reindex immediately |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/` | None | Health check + watch status |
+| `POST` | `/webhook` | `x-goog-channel-token` | Google Drive push notification receiver |
+| `POST` | `/setup` | `Bearer <secret>` | Register Drive watch channel |
+| `POST` | `/stop` | `Bearer <secret>` | Instructions to stop watching |
+| `POST` | `/reindex` | `Bearer <secret>` | Trigger full reindex immediately |
 
 ## License
 

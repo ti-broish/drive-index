@@ -7,6 +7,8 @@ export interface Env {
   WEBHOOK_SECRET: string;
   FOLDER_ID: string;
   SPREADSHEET_ID: string;
+  WORKER_URL: string;
+  WATCH_ENABLED: string;
 }
 
 interface DriveEvent {
@@ -15,7 +17,7 @@ interface DriveEvent {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === "POST" && url.pathname === "/webhook") {
@@ -26,18 +28,25 @@ export default {
       return handleSetup(request, env);
     }
 
+    if (request.method === "POST" && url.pathname === "/stop") {
+      return handleStop(request, env);
+    }
+
     if (request.method === "POST" && url.pathname === "/reindex") {
-      return handleReindex(env);
+      return handleReindex(request, env);
     }
 
     if (url.pathname === "/") {
-      return new Response("drive-index worker is running", { status: 200 });
+      return Response.json({
+        status: "running",
+        watchEnabled: env.WATCH_ENABLED === "true",
+      });
     }
 
     return new Response("Not found", { status: 404 });
   },
 
-  async queue(batch: MessageBatch<DriveEvent>, env: Env): Promise<void> {
+  async queue(batch: MessageBatch<DriveEvent>, env: Env, _ctx: ExecutionContext): Promise<void> {
     console.log(`Processing batch of ${batch.messages.length} events`);
 
     const files = await listFilesInFolder(
@@ -59,18 +68,31 @@ export default {
   async scheduled(
     _controller: ScheduledController,
     env: Env,
+    _ctx: ExecutionContext,
   ): Promise<void> {
+    if (env.WATCH_ENABLED !== "true") {
+      console.log("Cron: watch is disabled, skipping channel renewal");
+      return;
+    }
+
     console.log("Cron: renewing Drive watch channel");
-    const workerUrl = "https://drive-index.<your-subdomain>.workers.dev";
     await setupWatch(
       env.GOOGLE_SERVICE_ACCOUNT_KEY,
       env.FOLDER_ID,
-      `${workerUrl}/webhook`,
+      `${env.WORKER_URL}/webhook`,
       env.WEBHOOK_SECRET,
     );
     console.log("Watch channel renewed");
   },
 };
+
+function requireAuth(request: Request, env: Env): Response | null {
+  const auth = request.headers.get("Authorization");
+  if (auth !== `Bearer ${env.WEBHOOK_SECRET}`) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  return null;
+}
 
 async function handleWebhook(request: Request, env: Env): Promise<Response> {
   // Google sends the token we set during watch setup
@@ -94,24 +116,36 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 }
 
 async function handleSetup(request: Request, env: Env): Promise<Response> {
-  // Simple auth: require the webhook secret as a Bearer token
-  const auth = request.headers.get("Authorization");
-  if (auth !== `Bearer ${env.WEBHOOK_SECRET}`) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+  const denied = requireAuth(request, env);
+  if (denied) return denied;
 
-  const workerUrl = new URL(request.url).origin;
+  const webhookUrl = `${env.WORKER_URL || new URL(request.url).origin}/webhook`;
   const result = await setupWatch(
     env.GOOGLE_SERVICE_ACCOUNT_KEY,
     env.FOLDER_ID,
-    `${workerUrl}/webhook`,
+    webhookUrl,
     env.WEBHOOK_SECRET,
   );
 
   return Response.json(result);
 }
 
-async function handleReindex(env: Env): Promise<Response> {
+async function handleStop(request: Request, env: Env): Promise<Response> {
+  const denied = requireAuth(request, env);
+  if (denied) return denied;
+
+  return Response.json({
+    message:
+      "Set WATCH_ENABLED to 'false' via wrangler secret or dashboard. " +
+      "The cron will stop renewing the channel and it will expire within 7 days. " +
+      "To stop immediately, call the Drive channels.stop API with the channel ID and resource ID from /setup response.",
+  });
+}
+
+async function handleReindex(request: Request, env: Env): Promise<Response> {
+  const denied = requireAuth(request, env);
+  if (denied) return denied;
+
   const files = await listFilesInFolder(
     env.GOOGLE_SERVICE_ACCOUNT_KEY,
     env.FOLDER_ID,
