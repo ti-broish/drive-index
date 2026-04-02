@@ -93,7 +93,6 @@ async function listFilesRecursive(
 // When a notification fires, the worker does a full reindex of the folder.
 export async function setupWatch(
   serviceAccountKey: string,
-  folderId: string,
   webhookUrl: string,
   webhookSecret: string,
 ): Promise<WatchResponse> {

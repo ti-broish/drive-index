@@ -1,20 +1,51 @@
 import { listFilesInFolder, setupWatch } from "./drive";
 import { writeToSheet } from "./sheets";
 
+export interface FolderMapping {
+  folderId: string;
+  spreadsheetId: string;
+  sheetName: string;
+}
+
 export interface Env {
   DRIVE_EVENTS: Queue<DriveEvent>;
   GOOGLE_SERVICE_ACCOUNT_KEY: string;
   WEBHOOK_SECRET: string;
-  FOLDER_ID: string;
-  SPREADSHEET_ID: string;
-  SHEET_NAME: string;
+  FOLDER_MAPPINGS: string;
   WORKER_URL: string;
   WATCH_ENABLED: string;
 }
 
 interface DriveEvent {
-  folderId: string;
   timestamp: number;
+}
+
+function parseMappings(env: Env): FolderMapping[] {
+  return JSON.parse(env.FOLDER_MAPPINGS);
+}
+
+async function reindexAll(env: Env): Promise<number[]> {
+  const mappings = parseMappings(env);
+  const results: number[] = [];
+
+  for (const mapping of mappings) {
+    const files = await listFilesInFolder(
+      env.GOOGLE_SERVICE_ACCOUNT_KEY,
+      mapping.folderId,
+    );
+
+    await writeToSheet(
+      env.GOOGLE_SERVICE_ACCOUNT_KEY,
+      mapping.spreadsheetId,
+      mapping.sheetName,
+      files,
+    );
+
+    console.log(`Indexed ${files.length} files for folder ${mapping.folderId} → ${mapping.sheetName}`);
+    results.push(files.length);
+  }
+
+  return results;
 }
 
 export default {
@@ -38,9 +69,11 @@ export default {
     }
 
     if (url.pathname === "/") {
+      const mappings = parseMappings(env);
       return Response.json({
         status: "running",
         watchEnabled: env.WATCH_ENABLED === "true",
+        folders: mappings.length,
       });
     }
 
@@ -49,22 +82,8 @@ export default {
 
   async queue(batch: MessageBatch<DriveEvent>, env: Env, _ctx: ExecutionContext): Promise<void> {
     console.log(`Processing batch of ${batch.messages.length} events`);
-
-    const files = await listFilesInFolder(
-      env.GOOGLE_SERVICE_ACCOUNT_KEY,
-      env.FOLDER_ID,
-    );
-
-    console.log(`Found ${files.length} files, writing to sheet`);
-
-    await writeToSheet(
-      env.GOOGLE_SERVICE_ACCOUNT_KEY,
-      env.SPREADSHEET_ID,
-      env.SHEET_NAME,
-      files,
-    );
-
-    console.log("Sheet updated successfully");
+    const results = await reindexAll(env);
+    console.log(`Reindex complete: ${results.join(", ")} files`);
   },
 
   async scheduled(
@@ -80,7 +99,6 @@ export default {
     console.log("Cron: renewing Drive watch channel");
     await setupWatch(
       env.GOOGLE_SERVICE_ACCOUNT_KEY,
-      env.FOLDER_ID,
       `${env.WORKER_URL}/webhook`,
       env.WEBHOOK_SECRET,
     );
@@ -97,20 +115,17 @@ function requireAuth(request: Request, env: Env): Response | null {
 }
 
 async function handleWebhook(request: Request, env: Env): Promise<Response> {
-  // Google sends the token we set during watch setup
   const token = request.headers.get("x-goog-channel-token");
   if (token !== env.WEBHOOK_SECRET) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  // Google sends a "sync" message when watch is first set up — ack it
   const state = request.headers.get("x-goog-resource-state");
   if (state === "sync") {
     return new Response("OK", { status: 200 });
   }
 
   await env.DRIVE_EVENTS.send({
-    folderId: env.FOLDER_ID,
     timestamp: Date.now(),
   });
 
@@ -124,7 +139,6 @@ async function handleSetup(request: Request, env: Env): Promise<Response> {
   const webhookUrl = `${env.WORKER_URL || new URL(request.url).origin}/webhook`;
   const result = await setupWatch(
     env.GOOGLE_SERVICE_ACCOUNT_KEY,
-    env.FOLDER_ID,
     webhookUrl,
     env.WEBHOOK_SECRET,
   );
@@ -148,17 +162,14 @@ async function handleReindex(request: Request, env: Env): Promise<Response> {
   const denied = requireAuth(request, env);
   if (denied) return denied;
 
-  const files = await listFilesInFolder(
-    env.GOOGLE_SERVICE_ACCOUNT_KEY,
-    env.FOLDER_ID,
-  );
+  const results = await reindexAll(env);
+  const mappings = parseMappings(env);
 
-  await writeToSheet(
-    env.GOOGLE_SERVICE_ACCOUNT_KEY,
-    env.SPREADSHEET_ID,
-    env.SHEET_NAME,
-    files,
-  );
-
-  return Response.json({ indexed: files.length });
+  return Response.json({
+    folders: mappings.map((m, i) => ({
+      folderId: m.folderId,
+      sheetName: m.sheetName,
+      indexed: results[i],
+    })),
+  });
 }

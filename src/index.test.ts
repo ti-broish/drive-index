@@ -17,9 +17,10 @@ describe("fetch handler", () => {
     await waitOnExecutionContext(ctx);
 
     expect(response.status).toBe(200);
-    const body = await response.json<{ status: string; watchEnabled: boolean }>();
+    const body = await response.json<{ status: string; watchEnabled: boolean; folders: number }>();
     expect(body.status).toBe("running");
     expect(body.watchEnabled).toBe(false);
+    expect(body.folders).toBe(2);
   });
 
   it("returns 404 for unknown routes", async () => {

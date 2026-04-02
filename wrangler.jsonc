@@ -37,9 +37,8 @@
     "required": [
       "GOOGLE_SERVICE_ACCOUNT_KEY",
       "WEBHOOK_SECRET",
-      "FOLDER_ID",
-      "SPREADSHEET_ID",
-      "SHEET_NAME",
+      // JSON array: [{"folderId":"...","spreadsheetId":"...","sheetName":"..."}]
+      "FOLDER_MAPPINGS",
       "WORKER_URL"
     ]
   }
