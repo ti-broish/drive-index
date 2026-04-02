@@ -89,6 +89,8 @@ async function listFilesRecursive(
   return files;
 }
 
+// Uses the Changes API to watch for any changes on the drive.
+// When a notification fires, the worker does a full reindex of the folder.
 export async function setupWatch(
   serviceAccountKey: string,
   folderId: string,
@@ -96,10 +98,17 @@ export async function setupWatch(
   webhookSecret: string,
 ): Promise<WatchResponse> {
   const token = await getAccessToken(serviceAccountKey);
+
+  // Get the current change token — we watch from this point forward
+  const startRes = await driveGet("/changes/startPageToken", token, {
+    supportsAllDrives: "true",
+  });
+  const { startPageToken } = await startRes.json<{ startPageToken: string }>();
+
   const channelId = crypto.randomUUID();
 
   const res = await fetch(
-    `${DRIVE_API}/files/${folderId}/watch?supportsAllDrives=true`,
+    `${DRIVE_API}/changes/watch?pageToken=${encodeURIComponent(startPageToken)}&supportsAllDrives=true&includeItemsFromAllDrives=true`,
     {
       method: "POST",
       headers: {
@@ -112,7 +121,6 @@ export async function setupWatch(
         address: webhookUrl,
         token: webhookSecret,
         params: {
-          // Max expiration is ~1 week
           ttl: "604800",
         },
       }),
